@@ -3,13 +3,10 @@ import pdb
 import pprint
 from bs4 import BeautifulSoup as bs4
 import argparse
+from secrets import GOODREADS_KEY
+import re
 
 pp = pprint.PrettyPrinter()
-
-parser = argparse.ArgumentParser()
-parser.add_argument('title', help='The title of the book to look for', nargs='?')
-parser.add_argument('--file', help='Filename with a list of books to search for')
-args = parser.parse_args()
 
 
 def isTitleAvailable(title: str) -> None:
@@ -24,7 +21,10 @@ def isTitleAvailable(title: str) -> None:
 
     button_wrapper = soup.find_all('div', {'class': 'item-transaction-button-wrap'})
     if len(button_wrapper) > 1:
-        print('Multiple copies available, not sure how to distinguish')
+        print(f'Multiple copies of {title} available, not sure how to distinguish')
+    elif len(button_wrapper) == 0:
+        print(f'Could not find {title}')
+        return
 
     button_wrapper = button_wrapper[0]
 
@@ -36,13 +36,37 @@ def isTitleAvailable(title: str) -> None:
         print(f'Status for {title} is unknown')
 
 
+def getGoodreadsLists():
+    # shelves = requests.get('https://www.goodreads.com/shelf/list.xml', params={'key': GOODREADS_KEY})
+    # pdb.set_trace()
+    # return shelves
+
+    books = requests.get('https://www.goodreads.com/review/list/10636627.xml', params={'key': GOODREADS_KEY})
+    soup = bs4(books.content, 'lxml')
+    xml_titles = soup.find_all('title')
+    # Get the title before any ( or :
+    titles = [re.split('\(|:', x.get_text(strip=True))[0].strip() for x in xml_titles]
+    return titles
+
+
 def main():
-    if args.file:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('title', help='The title of the book to look for', nargs='?')
+    parser.add_argument('--file', help='Filename with a list of books to search for')
+    args = parser.parse_args()
+
+    if not args.file and not args.title:
+        titles = getGoodreadsLists()
+    elif args.file:
         with open(f'{args.file}', 'r') as infile:
+            titles = []
             for title in infile:
-                isTitleAvailable(title.strip())
+                titles.append(title.strip())
     elif args.title:
-        isTitleAvailable(args.title.strip())
+        titles = [title.strip()]
+
+    for title in titles:
+        isTitleAvailable(title)
 
 
 if __name__ == '__main__':
